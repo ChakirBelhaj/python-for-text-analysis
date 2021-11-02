@@ -1,68 +1,64 @@
-df = pd.read_csv (r'./KS_model_training_data.csv', sep = ',')
-df = df.drop(columns=['backers_count', 'converted_pledged_amount', 'pledged', 'usd_pledged'])
-df = df.dropna()
+import pandas as pd
+import seaborn as sns
+import numpy as np
+from scipy.stats import norm
+from scipy import stats
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_val_score
 
-df['created_at'] = pd.to_datetime(df['created_at'],unit='s')
-df['created_hour'] = df.created_at.apply(lambda x: x.hour)
-df['created_month'] = df.created_at.apply(lambda x: x.month)
-df['created_year'] = df.created_at.apply(lambda x: x.year)
+import warnings
+warnings.filterwarnings('ignore')
 
+trainData = pd.read_csv (r'./KS_model_training_data.csv', sep = ',')
+trainData = trainData.drop(columns=['backers_count', 'converted_pledged_amount', 'pledged', 'usd_pledged'])
+trainData.isnull().sum()
 
-df['deadline'] = pd.to_datetime(df['deadline'],unit='s')
-df['deadline_hour'] = df.deadline.apply(lambda x: x.hour)
-df['deadline_month'] = df.deadline.apply(lambda x: x.month)
-df['deadline_year'] = df.deadline.apply(lambda x: x.year)
+trainData = trainData.dropna()
+np.where(trainData.applymap(lambda x: x == ''))
 
+trainData['created_at'] = pd.to_datetime(trainData['created_at'],unit='s')
+trainData['created_month'] = trainData.created_at.apply(lambda x: x.month)
+trainData['deadline'] = pd.to_datetime(trainData['deadline'],unit='s')
 
-df['launched_at'] = pd.to_datetime(df['launched_at'],unit='s')
-df['launched_hour'] = df.launched_at.apply(lambda x: x.hour)
-df['launched_month'] = df.launched_at.apply(lambda x: x.month)
-df['launched_year'] = df.launched_at.apply(lambda x: x.year)
+#derived features
+trainData['created_year'] = trainData.created_at.apply(lambda x: x.year)
+trainData['blurb_length'] = trainData['blurb'].str.len()
+trainData['name_length'] = trainData['name'].str.len()
 
-
-df['launched_after_deadline'] = (df['launched_at'] > df['deadline'])
-# 
-# df['deadline_at'] = pd.to_datetime(df['deadline'],unit='s')
-# df['deadline_hour'] = df.deadline.apply(lambda x: x.hour)
-
-
-df["category"] = df["category"].astype('category')
-df["category_encoded"] = df["category"].cat.codes
-
-
-
-df["subcategory"] = df["subcategory"].astype('category')
-df["subcategory_encoded"] = df["subcategory"].cat.codes
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.feature_selection import RFE
+from sklearn.metrics import classification_report
 
 
-df["location"] = df["location"].astype('category')
-df["location_encoded"] = df["location"].cat.codes
+testData = pd.read_csv (r'./KS_test_data.csv', sep = ';')
+np.where(testData.applymap(lambda x: x == ''))
+testData = trainData.dropna()
+
+testData['name_length'] = testData['name'].str.len()
+testData['blurb_length'] = testData['blurb'].str.len()
+testData['created_at'] = pd.to_datetime(trainData['created_at'],unit='s')
+testData['created_hour'] = testData.created_at.apply(lambda x: x.hour)
+testData['created_month'] = testData.created_at.apply(lambda x: x.month)
+testData['created_year'] = testData.created_at.apply(lambda x: x.year)
+testData['deadline'] = pd.to_datetime(trainData['deadline'],unit='s')
+testData['launched_at'] = pd.to_datetime(trainData['launched_at'],unit='s')
+
+categoriesToEncode = ['category', 'subcategory', 'currency', 'country']
+trainDataHotEncoded = pd.get_dummies(trainData, prefix='category', columns=categoriesToEncode)
+testDataHotEncoded = pd.get_dummies(testData, prefix='category', columns=categoriesToEncode)
 
 
-df["country"] = df["country"].astype('category')
-df["country_encoded"] = df["country"].cat.codes
+features = ['name_length', 'created_year', 'blurb_length']
+X = trainDataHotEncoded[features]
+y = trainDataHotEncoded['funded']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+knn = KNeighborsClassifier(n_neighbors = 3)
+knn.fit(X_train,y_train)
+accuracy = knn.score(X_test, y_test)
 
-df['blurb_length'] = df['blurb'].str.len()
-df['name_length'] = df['name'].str.len()
-
-
-
-print(np.corrcoef(df['funded'], df['category_encoded']))
-print(np.corrcoef(df['funded'], df['subcategory_encoded']))
-print(np.corrcoef(df['funded'], df['location_encoded']))
-print(np.corrcoef(df['funded'], df['country_encoded']))
-print(np.corrcoef(df['funded'], df['blurb_length']))
-print(np.corrcoef(df['funded'], df['fx_rate']))
-print(np.corrcoef(df['funded'], df['name_length']))
-
-# print(df.head(10))
-
-# print(np.corrcoef(df['funded'], df['staff_pick']))
-# print(np.corrcoef(df['funded'], df['created_month']))
-# print(np.corrcoef(df['funded'], df['deadline']))
-# df['category'].value_counts()[:20].plot(kind='bar')
-# df.plot.scatter(x = 'goal', y ='category')
-
-
-
+print(classification_report(y_test, knn.predict(X_test)))
+print("accuracy = " + str(round(100 * accuracy)) + "%")
+cross_val_score(knn, X_train, y_train, cv=5)
 
